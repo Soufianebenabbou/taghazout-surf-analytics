@@ -1,6 +1,11 @@
-# Bibliothèques : requêtes HTTP et manipulation de tableaux
+# Charge les variables du fichier .env (dont le chemin de la clé BigQuery)
+from dotenv import load_dotenv
+load_dotenv()
+
+# Bibliothèques : requêtes HTTP, tableaux, et chargement vers BigQuery
 import requests
 import pandas as pd
+import pandas_gbq
 
 # Coordonnées de Taghazout (Maroc)
 LATITUDE = 30.5450
@@ -13,6 +18,10 @@ DATE_FIN = "2025-12-31"
 
 # Nombre de jours de prévision
 JOURS_PREVISION = 7
+
+# Destination BigQuery
+PROJET_GCP = "taghazout-surf"
+DATASET = "taghazout_raw"
 
 # Variables de houle
 VARIABLES_MER = [
@@ -77,10 +86,24 @@ def collecter_previsions():
     return mer.merge(meteo, on="time", how="inner")
 
 
-# Point d'entrée : on collecte les deux jeux et on affiche un aperçu
+# Envoie un tableau vers une table BigQuery, en remplaçant son contenu
+def charger_dans_bigquery(df, nom_table):
+    # La colonne time arrive en texte : on la convertit en vraie date-heure
+    df["time"] = pd.to_datetime(df["time"])
+
+    pandas_gbq.to_gbq(
+        df,
+        destination_table=f"{DATASET}.{nom_table}",
+        project_id=PROJET_GCP,
+        if_exists="replace",
+    )
+    print(f"{len(df)} lignes chargées dans {DATASET}.{nom_table}")
+
+
+# Point d'entrée : on collecte puis on charge dans BigQuery
 if __name__ == "__main__":
     historique = collecter_historique()
     previsions = collecter_previsions()
 
-    print("Historique :", historique.shape)
-    print("Prévisions :", previsions.shape)
+    charger_dans_bigquery(historique, "historique")
+    charger_dans_bigquery(previsions, "previsions")
