@@ -218,4 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-.envcollecte/exploration_taghazout.ipynb
+
+.env
+collecte/exploration_taghazout.ipynb
