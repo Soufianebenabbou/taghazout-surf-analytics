@@ -30,7 +30,8 @@ VARIABLES_MER = [
     "wave_direction",
     "swell_wave_height",
     "swell_wave_period",
-]
+    "sea_surface_temperature",
+]   
 
 # Variables météo
 VARIABLES_METEO = [
@@ -39,6 +40,9 @@ VARIABLES_METEO = [
     "wind_direction_10m",
     "wind_gusts_10m",
     "precipitation",
+    "relative_humidity_2m",
+    "dew_point_2m",
+    "cloud_cover_low",
 ]
 
 

@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    database: taghazout-surf
+    schema: taghazout_raw
+    tables:
+      - name: historique
+      - name: previsions
