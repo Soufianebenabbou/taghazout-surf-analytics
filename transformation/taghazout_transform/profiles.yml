@@ -1,0 +1,31 @@
+# Profil dbt du projet, versionne : il ne contient aucun secret.
+#
+# Deux cibles, deux usages :
+#   dev   (par defaut) - en local, via les identifiants gcloud personnels.
+#   prod               - sur GitHub Actions, via le compte de service designe
+#                        par GOOGLE_APPLICATION_CREDENTIALS. Aucune cle n'est
+#                        ecrite ici : seul le chemin du fichier est lu, et ce
+#                        fichier vit hors du depot.
+
+taghazout_transform:
+  target: dev
+
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'taghazout-surf') }}"
+      dataset: dbt_soufiane
+      location: EU
+      threads: 4
+      timeout_seconds: 300
+
+    prod:
+      type: bigquery
+      method: service-account
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: dbt_prod
+      location: EU
+      threads: 4
+      timeout_seconds: 300

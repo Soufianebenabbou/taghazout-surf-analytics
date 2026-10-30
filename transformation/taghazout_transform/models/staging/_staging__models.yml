@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: stg_conditions_historique
+    description: >
+      Couche silver de l'historique : noms de colonnes en clair, champs
+      derives. Grain : une ligne par heure.
+    columns:
+
+      - name: horodatage
+        description: Heure de la mesure. Cle primaire de la table.
+        tests:
+          - not_null
+          - unique
+
+      - name: jour
+        description: Date de la mesure, sans l'heure.
+        tests:
+          - not_null
+
+      - name: heure
+        description: Heure de la journee, de 0 a 23.
+        tests:
+          - not_null
+
+      - name: mois
+        description: Mois de la mesure, de 1 a 12.
+        tests:
+          - not_null
+
+      - name: hauteur_vague_m
+        description: Hauteur de vague en metres, telle que publiee par Open-Meteo.
+        tests:
+          - not_null
+
+      - name: vent_kmh
+        description: Vitesse du vent a 10 metres, en km/h.
+        tests:
+          - not_null
+
+      - name: vent_offshore
+        description: >
+          Vrai quand le vent vient de la terre, entre 45 et 135 degres. C'est
+          lui qui lisse la surface : un vent offshore vaut mieux qu'un vent
+          faible venant du large.
+        tests:
+          - not_null
+
+  - name: stg_conditions_previsions
+    description: >
+      Couche silver des previsions a 7 jours. Memes regles de nommage et
+      memes champs derives que l'historique, pour que le barème s'applique
+      a l'identique aux deux.
+    columns:
+
+      - name: horodatage
+        description: Heure prevue. Cle primaire de la table.
+        tests:
+          - not_null
+          - unique
+
+      - name: heure
+        description: Heure de la journee, de 0 a 23.
+        tests:
+          - not_null
+
+      - name: hauteur_vague_m
+        description: Hauteur de vague prevue, en metres.
+        tests:
+          - not_null
+
+      - name: vent_kmh
+        description: Vitesse du vent prevue, en km/h.
+        tests:
+          - not_null

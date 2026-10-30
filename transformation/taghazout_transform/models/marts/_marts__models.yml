@@ -1,0 +1,139 @@
+version: 2
+
+models:
+  - name: fct_conditions_horaires
+    description: >
+      Table de faits : une ligne par heure d'historique, avec le score de
+      surf sur 10. Le score combine la taille de vague, la periode de houle
+      et le vent, et tombe a 0 en dehors des heures de jour.
+    columns:
+
+      - name: horodatage
+        description: Heure de la mesure. Cle primaire de la table.
+        tests:
+          - not_null
+          - unique
+
+      - name: score_surf
+        description: >
+          Note de 0 a 10. Somme de points_taille (0-4), points_periode (0-3)
+          et points_vent (0-3), forcee a 0 entre 20h et 5h.
+        tests:
+          - not_null
+
+      - name: points_taille
+        description: Points attribues a la hauteur de vague, de 0 a 4.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2, 3, 4]
+                # quote: false -> comparer des entiers, pas du texte
+                quote: false
+
+      - name: points_periode
+        description: Points attribues a la periode de houle, de 0 a 3.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2, 3]
+                # quote: false -> comparer des entiers, pas du texte
+                quote: false
+
+      - name: points_vent
+        description: Points attribues au vent, de 0 a 3.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2, 3]
+                # quote: false -> comparer des entiers, pas du texte
+                quote: false
+
+  - name: dim_temps
+    description: >
+      Dimension temps : une ligne par jour couvert par l'historique. Porte
+      les libelles en francais et la distinction entre saison de surf et
+      saison balneaire.
+    columns:
+
+      - name: jour
+        description: Date. Cle primaire de la dimension.
+        tests:
+          - not_null
+          - unique
+
+      - name: nom_mois
+        description: Nom du mois en francais.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                   "Juillet", "Août", "Septembre", "Octobre", "Novembre",
+                   "Décembre"]
+
+      - name: saison
+        description: Saison meteorologique.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Hiver", "Printemps", "Été", "Automne"]
+
+      - name: saison_usage
+        description: >
+          Saison d'usage de Taghazout. Les meilleures conditions de surf
+          tombent en hiver, la frequentation balneaire en ete : les deux ne
+          se recouvrent pas, et c'est le resultat principal de l'analyse.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Saison surf", "Saison balnéaire", "Intersaison"]
+
+      - name: est_weekend
+        description: Vrai le samedi et le dimanche.
+        tests:
+          - not_null
+
+  - name: mart_fenetres_horaires
+    description: >
+      Qualite moyenne des conditions, croisee par mois et par heure.
+      Repond a la question : quand faut-il se mettre a l'eau ?
+      Grain : une ligne par couple mois x heure, soit 288 lignes.
+    columns:
+
+      - name: score_moyen
+        description: Score de surf moyen sur le creneau.
+        tests:
+          - not_null
+
+      - name: pct_offshore
+        description: Part des heures ou le vent vient de la terre, en pourcentage.
+        tests:
+          - not_null
+
+  - name: mart_saisonnalite_mensuelle
+    description: >
+      Agregat mensuel des conditions. Grain : une ligne par mois,
+      soit 12 lignes.
+
+  - name: mart_previsions_notees
+    description: >
+      Previsions a 7 jours, notees avec le meme bareme que l'historique.
+      Grain : une ligne par heure prevue, soit 168 lignes.
+    columns:
+
+      - name: horodatage
+        description: Heure prevue. Cle primaire de la table.
+        tests:
+          - not_null
+          - unique
+
+      - name: score_surf
+        description: Note de 0 a 10, calculee comme pour l'historique.
+        tests:
+          - not_null
