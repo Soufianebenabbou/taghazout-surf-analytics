@@ -35,7 +35,10 @@ jobs:
       # de production ; en local, la variable est absente et dbt reste en dev.
       - name: Executer le pipeline
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          # L'identifiant du projet n'est pas un secret : il figure deja en
+          # clair dans sources.yml, dans profiles.yml et dans toute URL de la
+          # console GCP. Seule la cle de service en est un.
+          GCP_PROJECT_ID: taghazout-surf
           DBT_PROFILES_DIR: transformation/taghazout_transform
           DBT_TARGET: prod
         run: python pipeline.py
