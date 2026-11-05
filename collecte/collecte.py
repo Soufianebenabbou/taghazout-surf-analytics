@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pandas_gbq
@@ -59,6 +59,25 @@ JOURS_PREVISION = 7
 
 # Nombre d'essais par appel d'API avant d'abandonner
 TENTATIVES_MAX = 4
+
+# Delai d'attente maximal d'une reponse, en secondes.
+DELAI_MAX_S = 120
+
+# L'historique est demande par tranches de cette duree, et non d'un bloc.
+# Open-Meteo applique ses quotas PAR ADRESSE IP et pondere selon le volume
+# demande : une requete de deux ans sur huit variables est l'une des plus
+# lourdes possibles, et c'est la premiere a se faire etrangler. Sur un runner
+# GitHub, dont l'IP est partagee par des milliers de jobs, elle ne passe pas.
+# Deux requetes legeres passent la ou une lourde est refusee.
+TRANCHE_HISTORIQUE_JOURS = 365
+
+# Force la recollecte de l'historique meme s'il est deja complet en base.
+# Utile si la periode est elargie ou si les donnees doivent etre refaites.
+FORCER_HISTORIQUE = os.getenv("COLLECTE_HISTORIQUE", "").lower() in {
+    "1",
+    "true",
+    "oui",
+}
 
 # Pause entre deux appels d'API. Open-Meteo limite le debit par adresse IP, et
 # les runners GitHub ont des adresses partagees donc deja tres sollicitees :
@@ -113,7 +132,7 @@ def appeler_api(url, variables, parametres_specifiques):
     reponse = None
     for tentative in range(1, TENTATIVES_MAX + 1):
         try:
-            reponse = requests.get(url, params=parametres, timeout=60)
+            reponse = requests.get(url, params=parametres, timeout=DELAI_MAX_S)
             reponse.raise_for_status()
             break
         except requests.RequestException as erreur:
@@ -163,15 +182,67 @@ def fusionner(mer, meteo):
     return fusion
 
 
-def collecter_historique():
-    """Houle (Marine) + meteo (Archive), sur la periode fixee."""
-    periode = {"start_date": DATE_DEBUT, "end_date": DATE_FIN}
+def tranches_de_periode(date_debut, date_fin, jours):
+    """Decoupe une periode en tranches successives de `jours` jours.
 
-    mer = appeler_api(
-        "https://marine-api.open-meteo.com/v1/marine", VARIABLES_MER, periode
+    Renvoie des couples (debut, fin) au format AAAA-MM-JJ, bornes comprises,
+    la derniere tranche s'arretant exactement sur date_fin.
+    """
+    debut = datetime.fromisoformat(date_debut).date()
+    fin = datetime.fromisoformat(date_fin).date()
+
+    while debut <= fin:
+        borne = min(debut + timedelta(days=jours - 1), fin)
+        yield debut.isoformat(), borne.isoformat()
+        debut = borne + timedelta(days=1)
+
+
+def appeler_api_par_tranches(url, variables, date_debut, date_fin):
+    """Appelle une API d'archive par tranches, puis recolle les morceaux.
+
+    Open-Meteo pondere ses quotas selon le volume demande : mieux vaut deux
+    requetes d'un an qu'une requete de deux ans. Les appels sont deja espaces
+    par appeler_api, ce qui evite de se faire couper entre deux tranches.
+    """
+    morceaux = []
+    for debut, fin in tranches_de_periode(date_debut, date_fin, TRANCHE_HISTORIQUE_JOURS):
+        logger.info(f"Tranche {debut} -> {fin}")
+        morceaux.append(
+            appeler_api(url, variables, {"start_date": debut, "end_date": fin})
+        )
+
+    complet = pd.concat(morceaux, ignore_index=True)
+
+    # Les bornes des tranches ne doivent ni se chevaucher ni laisser de trou.
+    # On le verifie plutot que de le supposer.
+    doublons = complet["time"].duplicated().sum()
+    if doublons:
+        raise RuntimeError(
+            f"{doublons} heure(s) en double apres recollage des tranches de {url}"
+        )
+
+    return complet
+
+
+def collecter_historique():
+    """Houle (Marine) + meteo (Archive), sur la periode fixee.
+
+    Les deux API sont interrogees par tranches d'un an : une requete de deux
+    ans sur huit variables pese trop lourd pour le limiteur d'Open-Meteo et
+    se fait etrangler, surtout depuis une IP partagee comme celle des runners
+    GitHub.
+    """
+    mer = appeler_api_par_tranches(
+        "https://marine-api.open-meteo.com/v1/marine",
+        VARIABLES_MER,
+        DATE_DEBUT,
+        DATE_FIN,
     )
-    meteo = appeler_api(
-        "https://archive-api.open-meteo.com/v1/archive", VARIABLES_METEO, periode
+    meteo = appeler_api_par_tranches(
+        "https://archive-api.open-meteo.com/v1/archive",
+        VARIABLES_METEO,
+        DATE_DEBUT,
+        DATE_FIN,
     )
 
     return fusionner(mer, meteo)
@@ -238,6 +309,51 @@ def hashes_existants(nom_table):
         )
 
 
+def heures_attendues():
+    """Nombre d'heures que doit contenir l'historique, bornes comprises."""
+    debut = datetime.fromisoformat(DATE_DEBUT)
+    fin = datetime.fromisoformat(DATE_FIN)
+    return int((fin - debut).total_seconds() // 3600) + 24
+
+
+def historique_deja_complet():
+    """L'historique couvre-t-il deja toute la periode demandee ?
+
+    La periode est passee et figee : du 1er janvier 2024 au 31 decembre 2025.
+    Une fois ces heures en base, elles ne changeront plus jamais. Les
+    recollecter chaque matin ne sert a rien -- et c'est justement l'appel le
+    plus lourd (17 544 lignes), le seul que l'API Archive refuse aux serveurs
+    de GitHub Actions.
+
+    On interroge donc la base avant d'interroger l'API. Pour forcer une
+    recollecte malgre tout (periode elargie, donnees corrompues) :
+        COLLECTE_HISTORIQUE=1 python pipeline.py
+    """
+    if FORCER_HISTORIQUE:
+        logger.info("COLLECTE_HISTORIQUE demande : recollecte forcee.")
+        return False
+
+    try:
+        requete = f"SELECT count(*) AS n FROM `{PROJET_GCP}.{DATASET}.historique`"
+        lignes_en_base = next(iter(client.query(requete).result())).n
+    except NotFound:
+        return False
+
+    attendu = heures_attendues()
+    if lignes_en_base >= attendu:
+        logger.info(
+            f"Historique deja complet ({lignes_en_base} lignes pour {attendu} "
+            f"heures attendues) : collecte ignoree."
+        )
+        return True
+
+    logger.info(
+        f"Historique incomplet ({lignes_en_base} lignes sur {attendu}) : "
+        f"collecte relancee."
+    )
+    return False
+
+
 def charger_historique(df):
     """N'insere que les lignes nouvelles, a la suite des precedentes."""
     deja_en_base = hashes_existants("historique")
@@ -271,8 +387,15 @@ def charger_previsions(df):
 
 
 def main():
-    """Collecte les deux jeux, puis les charge chacun selon sa regle."""
-    charger_historique(enrichir(collecter_historique()))
+    """Collecte les deux jeux, puis les charge chacun selon sa regle.
+
+    L'historique n'est collecte que s'il manque en base : il porte sur une
+    periode passee et figee. Les previsions, elles, sont rechargees a chaque
+    execution -- c'est tout leur interet.
+    """
+    if not historique_deja_complet():
+        charger_historique(enrichir(collecter_historique()))
+
     charger_previsions(enrichir(collecter_previsions()))
     logger.info("Collecte Taghazout terminee.")
 

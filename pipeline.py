@@ -20,6 +20,7 @@ from collecte import (  # noqa: E402
     collecter_historique,
     collecter_previsions,
     enrichir,
+    historique_deja_complet,
 )
 
 logging.basicConfig(
@@ -36,10 +37,19 @@ CIBLE_DBT = os.getenv("DBT_TARGET")
 
 
 def etape_collecte():
-    """Interroge les API et charge les deux tables dans BigQuery."""
+    """Interroge les API et charge les deux tables dans BigQuery.
+
+    L'historique porte sur une periode passee et figee : on ne le recollecte
+    que s'il manque en base. C'est l'appel le plus lourd (17 544 lignes) et
+    le seul que l'API Archive d'Open-Meteo refuse aux serveurs de GitHub
+    Actions -- le sauter quand il est inutile rend l'execution quotidienne
+    rapide et fiable.
+    """
     logger.info("=== Collecte des donnees ===")
 
-    charger_historique(enrichir(collecter_historique()))
+    if not historique_deja_complet():
+        charger_historique(enrichir(collecter_historique()))
+
     charger_previsions(enrichir(collecter_previsions()))
 
 
