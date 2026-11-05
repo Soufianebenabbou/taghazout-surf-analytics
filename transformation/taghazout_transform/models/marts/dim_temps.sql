@@ -12,21 +12,8 @@ select
     extract(day from jour) as jour_du_mois,
     extract(dayofweek from jour) as jour_semaine_num,
 
-    -- Nom du mois en français
-    case extract(month from jour)
-        when 1 then 'Janvier'
-        when 2 then 'Février'
-        when 3 then 'Mars'
-        when 4 then 'Avril'
-        when 5 then 'Mai'
-        when 6 then 'Juin'
-        when 7 then 'Juillet'
-        when 8 then 'Août'
-        when 9 then 'Septembre'
-        when 10 then 'Octobre'
-        when 11 then 'Novembre'
-        else 'Décembre'
-    end as nom_mois,
+    -- Nom du mois en français (macro partagée avec les deux marts)
+    {{ nom_mois('extract(month from jour)') }} as nom_mois,
 
     -- Saison météorologique
     case

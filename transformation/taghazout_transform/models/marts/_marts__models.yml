@@ -106,6 +106,13 @@ models:
       Grain : une ligne par couple mois x heure, soit 288 lignes.
     columns:
 
+      - name: nom_mois
+        description: >
+          Nom du mois en francais, pour l'affichage. La colonne `mois` reste
+          disponible a cote pour le tri.
+        tests:
+          - not_null
+
       - name: score_moyen
         description: Score de surf moyen sur le creneau.
         tests:
@@ -119,7 +126,36 @@ models:
   - name: mart_saisonnalite_mensuelle
     description: >
       Agregat mensuel des conditions. Grain : une ligne par mois,
-      soit 12 lignes.
+      soit 12 lignes. Les indicateurs de qualite de surf (score, pourcentages)
+      sont calcules sur les heures de jour uniquement ; les conditions
+      physiques (houle, temperatures, pluie) sur les 24 heures.
+    columns:
+
+      - name: mois
+        description: Numero du mois, de 1 a 12. Cle primaire et cle de tri.
+        tests:
+          - not_null
+          - unique
+
+      - name: heures_jour
+        description: >
+          Nombre d'heures de jour du mois (6h-19h). Denominateur de tous les
+          pourcentages de la table, expose pour qu'il soit verifiable.
+        tests:
+          - not_null
+
+      - name: score_moyen
+        description: >
+          Score de surf moyen du mois, sur les heures de jour uniquement.
+        tests:
+          - not_null
+
+      - name: nom_mois
+        description: >
+          Nom du mois en francais, pour l'affichage. La colonne `mois` reste
+          disponible a cote pour le tri.
+        tests:
+          - not_null
 
   - name: mart_previsions_notees
     description: >
