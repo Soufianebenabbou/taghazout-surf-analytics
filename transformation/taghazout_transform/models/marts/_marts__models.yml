@@ -3,9 +3,10 @@ version: 2
 models:
   - name: fct_conditions_horaires
     description: >
-      Table de faits : une ligne par heure d'historique, avec le score de
-      surf sur 10. Le score combine la taille de vague, la periode de houle
-      et le vent, et tombe a 0 en dehors des heures de jour.
+      Table de faits : une ligne par heure d'historique, avec trois scores de
+      surf sur 10 -- un par niveau de pratique. Les barèmes vivent dans la
+      macro scores_par_niveau, partagee avec mart_previsions_notees. Les trois
+      scores tombent a 0 en dehors des heures de jour.
     columns:
 
       - name: horodatage
@@ -16,10 +17,38 @@ models:
 
       - name: score_surf
         description: >
-          Note de 0 a 10. Somme de points_taille (0-4), points_periode (0-3)
-          et points_vent (0-3), forcee a 0 entre 20h et 5h.
+          Score du surfeur intermediaire, de 0 a 10. Somme de points_taille
+          (0-4), points_periode (0-3) et points_vent (0-3), forcee a 0 entre
+          20h et 5h. C'est le score historique du projet, conserve sous ce
+          nom ; score_intermediaire en est la copie dans les marts.
         tests:
           - not_null
+
+      - name: score_debutant
+        description: >
+          Score du surfeur debutant, de 0 a 10. Recompense les vagues de 0,5 a
+          1,0 m, le vent faible et les houles COURTES : une houle longue est
+          puissante, donc un danger a ce niveau.
+        tests:
+          - not_null
+
+      - name: score_confirme
+        description: >
+          Score du surfeur confirme, de 0 a 10. Recompense les vagues de plus
+          de 1,8 m et les houles longues ; tolere un vent plus fort.
+        tests:
+          - not_null
+
+      - name: niveau_favorise
+        description: >
+          Niveau qui obtient le meilleur score sur cette heure. En cas
+          d'egalite, le niveau le plus accessible l'emporte : une heure
+          egalement bonne pour tous est d'abord une heure pour tous.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Débutant", "Intermédiaire", "Confirmé", "Nuit"]
 
       - name: points_taille
         description: Points attribues a la hauteur de vague, de 0 a 4.
@@ -147,6 +176,29 @@ models:
       - name: score_moyen
         description: >
           Score de surf moyen du mois, sur les heures de jour uniquement.
+          Identique a score_intermediaire ; conserve pour compatibilite.
+        tests:
+          - not_null
+
+      - name: score_debutant
+        description: >
+          Score moyen du mois pour un surfeur debutant, heures de jour
+          uniquement. Les trois scores de niveau sont sur 10 : ils se
+          comparent directement sur un meme graphique.
+        tests:
+          - not_null
+
+      - name: score_intermediaire
+        description: >
+          Score moyen du mois pour un surfeur intermediaire, heures de jour
+          uniquement.
+        tests:
+          - not_null
+
+      - name: score_confirme
+        description: >
+          Score moyen du mois pour un surfeur confirme, heures de jour
+          uniquement.
         tests:
           - not_null
 

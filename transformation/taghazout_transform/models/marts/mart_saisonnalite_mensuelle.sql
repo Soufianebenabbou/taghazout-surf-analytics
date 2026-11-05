@@ -34,10 +34,50 @@ select
 
     -- Qualite de surf : heures de jour uniquement
     round(avg(case when {{ est_jour }} then score_surf end), 1) as score_moyen,
+
+    -- Le meme mois vu par trois surfeurs differents. Les trois barèmes
+    -- totalisent 10 points chacun, donc les trois courbes se comparent
+    -- directement sur un meme graphique.
+    round(
+        avg(case when {{ est_jour }} then score_debutant end), 1
+    ) as score_debutant,
+    round(
+        avg(case when {{ est_jour }} then score_surf end), 1
+    ) as score_intermediaire,
+    round(
+        avg(case when {{ est_jour }} then score_confirme end), 1
+    ) as score_confirme,
+
     countif(score_surf >= 7) as heures_excellentes,
     round(
         countif(score_surf >= 7) / countif({{ est_jour }}) * 100, 1
     ) as pct_heures_excellentes,
+
+    -- COMBIEN D'HEURES SONT EXCELLENTES POUR CHAQUE NIVEAU
+    -- ----------------------------------------------------
+    -- La moyenne mensuelle d'un score ne repond pas a la question que se pose
+    -- un surfeur. Elle flatte le debutant, pour qui presque chaque journee de
+    -- cette baie est correcte, et ecrase le confirme, pour qui tout se joue
+    -- sur une poignee d'heures par mois. Une moyenne de 3 sur 10 peut cacher
+    -- quinze heures a 8 noyees dans trois cents heures plates.
+    --
+    -- On compte donc les heures reellement excellentes (score >= 7) plutot
+    -- que de moyenner. C'est la metrique qui distingue vraiment les niveaux,
+    -- et c'est celle qui porte le message du tableau de bord.
+    countif(score_debutant >= 7) as heures_top_debutant,
+    countif(score_surf >= 7) as heures_top_intermediaire,
+    countif(score_confirme >= 7) as heures_top_confirme,
+
+    round(
+        countif(score_debutant >= 7) / countif({{ est_jour }}) * 100, 1
+    ) as pct_top_debutant,
+    round(
+        countif(score_surf >= 7) / countif({{ est_jour }}) * 100, 1
+    ) as pct_top_intermediaire,
+    round(
+        countif(score_confirme >= 7) / countif({{ est_jour }}) * 100, 1
+    ) as pct_top_confirme,
+
     round(
         countif({{ est_jour }} and vent_offshore) / countif({{ est_jour }}) * 100, 1
     ) as pct_offshore,

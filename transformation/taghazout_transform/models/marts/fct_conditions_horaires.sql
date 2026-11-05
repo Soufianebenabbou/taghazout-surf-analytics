@@ -1,4 +1,12 @@
--- Couche gold : table de faits, une ligne par heure, avec le score de surf
+-- Couche gold : table de faits, une ligne par heure d'historique.
+--
+-- Porte les trois scores de surf (debutant, intermediaire, confirme). Les
+-- barèmes sont definis une seule fois dans la macro scores_par_niveau, et
+-- partages avec mart_previsions_notees : un seul endroit a modifier le jour
+-- ou un seuil change.
+--
+-- score_surf reste le score intermediaire. C'est le score historique du
+-- projet, et il est conserve sous ce nom pour ne rien casser.
 
 with base as (
     select * from {{ ref('stg_conditions_historique') }}
@@ -7,43 +15,32 @@ with base as (
 notes as (
     select
         *,
-
-        -- Points sur la taille de vague (0 à 4)
-        case
-            when hauteur_vague_m < 0.8 then 0
-            when hauteur_vague_m < 1.0 then 1
-            when hauteur_vague_m < 1.8 then 4
-            when hauteur_vague_m < 2.5 then 3
-            else 2
-        end as points_taille,
-
-        -- Points sur la période de houle (0 à 3)
-        case
-            when periode_houle_s < 7 then 0
-            when periode_houle_s < 9 then 1
-            when periode_houle_s < 11 then 2
-            else 3
-        end as points_periode,
-
-        -- Points sur le vent (0 à 3)
-        case
-            when vent_offshore and vent_kmh < 10 then 3
-            when vent_offshore and vent_kmh < 20 then 2
-            when not vent_offshore and vent_kmh < 10 then 1
-            else 0
-        end as points_vent
-
+        {{ scores_par_niveau() }}
     from base
 )
 
 select
     *,
 
-    -- Score total sur 10, nul en dehors des heures de jour
+    -- Score intermediaire, nul en dehors des heures de jour
     case
         when heure between 6 and 19
             then points_taille + points_periode + points_vent
         else 0
-    end as score_surf
+    end as score_surf,
+
+    -- Le niveau pour qui la journee est la meilleure. Departège par le
+    -- niveau le plus accessible quand deux scores sont a egalite : une
+    -- journee egalement bonne pour tous est d'abord une journee pour tous.
+    case
+        when heure not between 6 and 19 then 'Nuit'
+        when score_debutant >= greatest(
+                 score_confirme,
+                 points_taille + points_periode + points_vent
+             ) then 'Débutant'
+        when (points_taille + points_periode + points_vent)
+             >= score_confirme then 'Intermédiaire'
+        else 'Confirmé'
+    end as niveau_favorise
 
 from notes

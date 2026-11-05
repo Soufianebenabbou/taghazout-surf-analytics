@@ -1,31 +1,15 @@
--- Couche gold : prévisions à 7 jours, notées avec le même barème
+-- Couche gold : previsions a 7 jours, notees avec exactement les memes
+-- barèmes que l'historique.
+--
+-- Les trois barèmes viennent de la macro scores_par_niveau, partagee avec
+-- fct_conditions_horaires. Avant, ils etaient recopies ici : deux copies du
+-- meme CASE, donc deux occasions de diverger. Une prevision notee autrement
+-- que l'historique n'est comparable a rien.
 
 with notes as (
     select
         *,
-
-        case
-            when hauteur_vague_m < 0.8 then 0
-            when hauteur_vague_m < 1.0 then 1
-            when hauteur_vague_m < 1.8 then 4
-            when hauteur_vague_m < 2.5 then 3
-            else 2
-        end as points_taille,
-
-        case
-            when periode_houle_s < 7 then 0
-            when periode_houle_s < 9 then 1
-            when periode_houle_s < 11 then 2
-            else 3
-        end as points_periode,
-
-        case
-            when vent_offshore and vent_kmh < 10 then 3
-            when vent_offshore and vent_kmh < 20 then 2
-            when not vent_offshore and vent_kmh < 10 then 1
-            else 0
-        end as points_vent
-
+        {{ scores_par_niveau() }}
     from {{ ref('stg_conditions_previsions') }}
 )
 
@@ -36,6 +20,17 @@ select
         when heure between 6 and 19
             then points_taille + points_periode + points_vent
         else 0
-    end as score_surf
+    end as score_surf,
+
+    case
+        when heure not between 6 and 19 then 'Nuit'
+        when score_debutant >= greatest(
+                 score_confirme,
+                 points_taille + points_periode + points_vent
+             ) then 'Débutant'
+        when (points_taille + points_periode + points_vent)
+             >= score_confirme then 'Intermédiaire'
+        else 'Confirmé'
+    end as niveau_favorise
 
 from notes

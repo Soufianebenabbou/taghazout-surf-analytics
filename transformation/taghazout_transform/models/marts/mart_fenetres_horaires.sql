@@ -9,6 +9,12 @@ select
 
     heure,
     round(avg(score_surf), 1) as score_moyen,
+
+    -- Le meme creneau vu par trois surfeurs differents
+    round(avg(score_debutant), 1) as score_debutant,
+    round(avg(score_surf), 1) as score_intermediaire,
+    round(avg(score_confirme), 1) as score_confirme,
+
     round(countif(vent_offshore) / count(*) * 100, 1) as pct_offshore,
     round(avg(vent_kmh), 1) as vent_moyen_kmh,
     round(countif(brouillard) / count(*) * 100, 1) as pct_brouillard,
