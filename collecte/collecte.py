@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -56,6 +57,14 @@ DATE_FIN = "2025-12-31"
 # Nombre de jours de prevision
 JOURS_PREVISION = 7
 
+# Nombre d'essais par appel d'API avant d'abandonner
+TENTATIVES_MAX = 4
+
+# Pause entre deux appels d'API. Open-Meteo limite le debit par adresse IP, et
+# les runners GitHub ont des adresses partagees donc deja tres sollicitees :
+# trois requetes coup sur coup se font parfois couper sans reponse.
+PAUSE_ENTRE_APPELS_S = 2
+
 DATASET = "taghazout_raw"
 
 client = bigquery.Client(project=PROJET_GCP)
@@ -84,7 +93,15 @@ VARIABLES_METEO = [
 
 
 def appeler_api(url, variables, parametres_specifiques):
-    """Appelle une API Open-Meteo et renvoie son tableau horaire."""
+    """Appelle une API Open-Meteo et renvoie son tableau horaire.
+
+    L'appel est retente en cas d'echec reseau. Une panne d'une seconde chez
+    Open-Meteo ne doit pas faire echouer toute l'execution du matin : sans
+    reessai, la collecte, les transformations et les 52 tests tombent avec
+    elle. On attend 2 secondes, puis 4, puis 8 -- assez pour absorber un
+    trou passager ou une limitation de debit, assez court pour ne pas
+    immobiliser le pipeline si le service est vraiment hors ligne.
+    """
     parametres = {
         "latitude": LATITUDE,
         "longitude": LONGITUDE,
@@ -93,8 +110,23 @@ def appeler_api(url, variables, parametres_specifiques):
         **parametres_specifiques,
     }
 
-    reponse = requests.get(url, params=parametres, timeout=60)
-    reponse.raise_for_status()
+    reponse = None
+    for tentative in range(1, TENTATIVES_MAX + 1):
+        try:
+            reponse = requests.get(url, params=parametres, timeout=60)
+            reponse.raise_for_status()
+            break
+        except requests.RequestException as erreur:
+            if tentative == TENTATIVES_MAX:
+                raise RuntimeError(
+                    f"{url} injoignable apres {TENTATIVES_MAX} tentatives : {erreur}"
+                ) from erreur
+            attente = 2**tentative
+            logger.warning(
+                f"Tentative {tentative}/{TENTATIVES_MAX} echouee sur {url} "
+                f"({type(erreur).__name__}). Nouvel essai dans {attente} s."
+            )
+            time.sleep(attente)
 
     df = pd.DataFrame(reponse.json()["hourly"])
 
@@ -104,6 +136,10 @@ def appeler_api(url, variables, parametres_specifiques):
         raise RuntimeError(f"Reponse vide de {url}")
 
     logger.info(f"{len(df):>6} lignes recues de {url}")
+
+    # On espace les appels plutot que d'attendre de se faire couper.
+    time.sleep(PAUSE_ENTRE_APPELS_S)
+
     return df
 
 
