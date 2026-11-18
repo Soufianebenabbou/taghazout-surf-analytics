@@ -1,6 +1,24 @@
 name: Pipeline Taghazout
 
 # Declenchement : chaque jour a 6h UTC, ou manuellement
+#
+# LIMITE CONNUE
+# -------------
+# Open-Meteo limite ses appels PAR ADRESSE IP, pas par projet. Les runners
+# GitHub partagent leurs adresses avec des milliers d'autres jobs : certains
+# matins le quota de l'adresse tiree est deja epuise par d'autres, et l'appel
+# aux previsions repond par un ReadTimeout. Le pipeline echoue alors, sans
+# que ce soit un defaut du code.
+#
+# Attenuation en place : les reessais attendent une minute, puis trois, puis
+# cinq (voir ATTENTES_ENTRE_TENTATIVES_S dans collecte/collecte.py). Cela
+# suffit si la limite se recharge a la minute. Si l'adresse est bloquee pour
+# l'heure, l'execution du jour echoue -- l'adresse ne change pas pendant un
+# job.
+#
+# Dans ce cas, test_previsions_fraiches signale le retard des le lendemain :
+# la panne ne passe pas inapercue. Relancer le workflow a la main suffit en
+# general, la nouvelle execution tirant une autre adresse.
 on:
   schedule:
     - cron: "0 6 * * *"

@@ -82,7 +82,21 @@ FORCER_HISTORIQUE = os.getenv("COLLECTE_HISTORIQUE", "").lower() in {
 # Pause entre deux appels d'API. Open-Meteo limite le debit par adresse IP, et
 # les runners GitHub ont des adresses partagees donc deja tres sollicitees :
 # trois requetes coup sur coup se font parfois couper sans reponse.
-PAUSE_ENTRE_APPELS_S = 2
+PAUSE_ENTRE_APPELS_S = 20
+
+# Attentes entre deux tentatives, en secondes.
+#
+# Avant, l'attente doublait : 2, 4, 8 secondes. Trop court. Le quota
+# d'Open-Meteo ne se recharge pas a la seconde, et surtout il se compte par
+# adresse IP : pendant une meme execution, l'adresse du runner ne change
+# jamais. Reessayer huit secondes plus tard, c'est frapper a la meme porte.
+#
+# Une minute, puis trois, puis cinq : assez pour qu'une limite par minute se
+# recharge, assez court pour ne pas immobiliser le job plus de dix minutes.
+# Au-dela, ce n'est plus un hoquet : c'est que l'adresse est bloquee pour
+# l'heure, et seule une execution ulterieure -- sur une autre machine, donc
+# une autre adresse -- a une chance de passer.
+ATTENTES_ENTRE_TENTATIVES_S = [60, 180, 300]
 
 DATASET = "taghazout_raw"
 
@@ -114,12 +128,14 @@ VARIABLES_METEO = [
 def appeler_api(url, variables, parametres_specifiques):
     """Appelle une API Open-Meteo et renvoie son tableau horaire.
 
-    L'appel est retente en cas d'echec reseau. Une panne d'une seconde chez
+    L'appel est retente en cas d'echec reseau. Une panne passagere chez
     Open-Meteo ne doit pas faire echouer toute l'execution du matin : sans
-    reessai, la collecte, les transformations et les 52 tests tombent avec
-    elle. On attend 2 secondes, puis 4, puis 8 -- assez pour absorber un
-    trou passager ou une limitation de debit, assez court pour ne pas
-    immobiliser le pipeline si le service est vraiment hors ligne.
+    reessai, la collecte, les transformations et les tests tombent avec elle.
+
+    Les attentes sont longues -- une minute, puis trois, puis cinq -- et non
+    de quelques secondes. Open-Meteo limite par adresse IP, pas par projet :
+    quand la limite est atteinte, elle se recharge a l'echelle de la minute,
+    pas de la seconde. Reessayer huit secondes plus tard ne sert a rien.
     """
     parametres = {
         "latitude": LATITUDE,
@@ -140,7 +156,7 @@ def appeler_api(url, variables, parametres_specifiques):
                 raise RuntimeError(
                     f"{url} injoignable apres {TENTATIVES_MAX} tentatives : {erreur}"
                 ) from erreur
-            attente = 2**tentative
+            attente = ATTENTES_ENTRE_TENTATIVES_S[tentative - 1]
             logger.warning(
                 f"Tentative {tentative}/{TENTATIVES_MAX} echouee sur {url} "
                 f"({type(erreur).__name__}). Nouvel essai dans {attente} s."
