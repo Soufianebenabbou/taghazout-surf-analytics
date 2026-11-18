@@ -180,6 +180,28 @@ models:
         tests:
           - not_null
 
+      - name: points_taille_moyen
+        description: >
+          Part du score mensuel qui vient de la hauteur de vague, heures de
+          jour uniquement. Avec points_periode_moyen et points_vent_moyen,
+          la somme redonne score_moyen : c'est ce qui permet d'afficher le
+          score en barre empilee plutot qu'en bloc opaque.
+        tests:
+          - not_null
+
+      - name: points_periode_moyen
+        description: >
+          Part du score mensuel qui vient de la periode de houle, heures de
+          jour uniquement.
+        tests:
+          - not_null
+
+      - name: points_vent_moyen
+        description: >
+          Part du score mensuel qui vient du vent, heures de jour uniquement.
+        tests:
+          - not_null
+
       - name: score_debutant
         description: >
           Score moyen du mois pour un surfeur debutant, heures de jour

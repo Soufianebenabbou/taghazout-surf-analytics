@@ -35,6 +35,27 @@ select
     -- Qualite de surf : heures de jour uniquement
     round(avg(case when {{ est_jour }} then score_surf end), 1) as score_moyen,
 
+    -- DE QUOI LE SCORE EST-IL FAIT ?
+    -- ------------------------------
+    -- Le score mensuel dit que l'hiver est meilleur, il ne dit pas pourquoi.
+    -- score_surf = points_taille + points_periode + points_vent : on expose
+    -- les trois moyennes separement pour que le tableau de bord puisse
+    -- empiler la barre en trois tronçons au lieu d'un bloc opaque.
+    --
+    -- Le meme filtre `est_jour` que score_moyen : c'est ce qui garantit que
+    -- la somme des trois tronçons retombe exactement sur la hauteur du
+    -- score affiche. Deux denominateurs differents sur une meme page, et le
+    -- lecteur perd confiance dans tout le reste.
+    round(
+        avg(case when {{ est_jour }} then points_taille end), 2
+    ) as points_taille_moyen,
+    round(
+        avg(case when {{ est_jour }} then points_periode end), 2
+    ) as points_periode_moyen,
+    round(
+        avg(case when {{ est_jour }} then points_vent end), 2
+    ) as points_vent_moyen,
+
     -- Le meme mois vu par trois surfeurs differents. Les trois barèmes
     -- totalisent 10 points chacun, donc les trois courbes se comparent
     -- directement sur un meme graphique.
